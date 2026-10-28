@@ -1,0 +1,7 @@
+profiles/
+__pycache__/
+.DS_Store
+.env
+*.db
+*.log
+.lock
