@@ -1,4 +1,4 @@
-# cold-mail
+# Every-HR
 
 Sends your pitch emails from your own Gmail, a few a day, automatically. Needs Python 3.9+ and nothing else. On Windows use `python` instead of `python3`.
 
