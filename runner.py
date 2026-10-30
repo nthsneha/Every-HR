@@ -99,7 +99,7 @@ def _run(cfg, store, dry_run, limit, force, sender_factory, sleep, now):
         log.info("Queue is empty.")
         return {"sent": 0, "failed": 0}
 
-    templates = mailer.load_templates(cfg["dir"] / "template.txt")
+    template = mailer.load_template(cfg["dir"] / "template.txt")
     if not dry_run:
         if not cfg["GMAIL_ADDRESS"] or not cfg["GMAIL_APP_PASSWORD"]:
             raise SystemExit("Set GMAIL_ADDRESS and GMAIL_APP_PASSWORD in the profile's .env")
@@ -114,9 +114,9 @@ def _run(cfg, store, dry_run, limit, force, sender_factory, sleep, now):
             if lead["email"] in optout:
                 store.mark_optout(lead["email"])
                 continue
-            subject, body = mailer.render(templates, lead)
+            subject, body = mailer.render(template)
             if dry_run:
-                print(f"--- To: {lead['email']}  (name={lead['name'] or '-'}, company={lead['company'] or '-'})")
+                print(f"--- To: {lead['email']}")
                 print(f"Subject: {subject}\n{body}\n")
                 sent += 1
                 continue
@@ -133,6 +133,9 @@ def _run(cfg, store, dry_run, limit, force, sender_factory, sleep, now):
                 failed += 1
                 consecutive += 1
                 log.warning("Failed %s: %s", lead["email"], e)
+            except OSError as e:  # network down/blocked: not the address's fault, so keep it queued
+                log.error("Cannot reach Gmail (%s). Stopping; will retry next run.", e)
+                break
             except Exception as e:
                 store.mark_failure(lead["email"], e)
                 failed += 1

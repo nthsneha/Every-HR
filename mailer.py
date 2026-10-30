@@ -18,33 +18,31 @@ class TemplateError(Exception):
     pass
 
 
-def load_templates(path: Path) -> dict:
-    """template.txt has two sections: '## WITH_COMPANY' and '## NO_COMPANY'.
-    Each begins with a 'Subject:' line, then the body."""
+GREETING = "Dear Hiring Team,"
+
+
+def load_template(path: Path) -> tuple:
+    """template.txt: first line 'Subject: ...', then the body. {greeting} becomes 'Dear Hiring Team,'.
+    Older two-part files (## WITH_COMPANY / ## NO_COMPANY) are accepted: the NO_COMPANY part is used."""
     text = path.read_text(encoding="utf-8")
     if "[EDIT" in text:
         raise TemplateError(f"{path} still contains [EDIT ...] placeholders. Write your pitch first.")
-    parts = re.split(r"^##\s*(WITH_COMPANY|NO_COMPANY)\s*$", text, flags=re.M)
-    sections = {parts[i]: parts[i + 1].strip() for i in range(1, len(parts) - 1, 2)}
-    if set(sections) != {"WITH_COMPANY", "NO_COMPANY"}:
-        raise TemplateError("template.txt needs both '## WITH_COMPANY' and '## NO_COMPANY' sections.")
-    out = {}
-    for key, block in sections.items():
-        first, _, body = block.partition("\n")
-        if not first.lower().startswith("subject:"):
-            raise TemplateError(f"Section {key} must start with a 'Subject:' line.")
-        out[key] = (first.split(":", 1)[1].strip(), body.strip())
-    return out
+    heading = re.search(r"^##\s*NO_COMPANY\s*$", text, flags=re.M)
+    if heading:
+        text = text[heading.end():]
+    elif re.search(r"^##\s*WITH_COMPANY\s*$", text, flags=re.M):
+        raise TemplateError("template.txt has a WITH_COMPANY part but no NO_COMPANY part. Use one pitch only.")
+    lines = text.strip().splitlines()
+    while lines and (not lines[0].strip() or lines[0].lstrip().startswith("#")):
+        lines.pop(0)  # blank lines and # comments at the top
+    if not lines or not lines[0].lower().startswith("subject:"):
+        raise TemplateError("template.txt must start with a 'Subject:' line.")
+    return lines[0].split(":", 1)[1].strip(), "\n".join(lines[1:]).strip()
 
 
-def render(templates: dict, lead) -> tuple:
-    name, company = (lead["name"] or "").strip(), (lead["company"] or "").strip()
-    subject, body = templates["WITH_COMPANY" if company else "NO_COMPANY"]
-    fields = {
-        "name": name,
-        "company": company,
-        "greeting": f"Hi {name}," if name else "Hi there,",
-    }
+def render(template: tuple) -> tuple:
+    subject, body = template
+    fields = {"greeting": GREETING, "name": "", "company": ""}
     return subject.format(**fields), body.format(**fields)
 
 

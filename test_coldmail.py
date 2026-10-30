@@ -7,20 +7,12 @@ from pathlib import Path
 import config
 import mailer
 import runner
-from guess import guess_company, guess_name
 from store import Store, ingest
 
-TEMPLATE = """## WITH_COMPANY
-Subject: Hello {company}
+TEMPLATE = """Subject: Hello
 
 {greeting}
-Pitch for {company}.
-
-## NO_COMPANY
-Subject: Hello
-
-{greeting}
-Generic pitch.
+A pitch.
 """
 
 
@@ -52,54 +44,44 @@ class FakeSender:
         pass
 
 
-class Guess(unittest.TestCase):
-    def test_company(self):
-        self.assertEqual(guess_company("a@acme-robotics.com"), "Acme Robotics")
-        self.assertEqual(guess_company("a@mail.tata.co.in"), "Tata")
-        self.assertEqual(guess_company("a@gmail.com"), "")
-        self.assertEqual(guess_company("a@yahoo.co.in"), "")
-
-    def test_name(self):
-        self.assertEqual(guess_name("priya.sharma@x.com"), "Priya")
-        self.assertEqual(guess_name("hr@x.com"), "")
-        self.assertEqual(guess_name("careers@x.com"), "")
-        self.assertEqual(guess_name("jd@x.com"), "")
-        self.assertEqual(guess_name("x1234@x.com"), "")
-
-
 class Ingest(unittest.TestCase):
     def test_csv_and_plain(self):
-        with tempfile.TemporaryDirectory() as t:
-            s = Store(Path(t) / "db")
-            a = Path(t) / "a.csv"
+        with tempfile.TemporaryDirectory() as d:
+            s = Store(Path(d) / "db")
+            a = Path(d) / "a.csv"
             a.write_text("email,name,company\nPriya@Acme.com,,\nbad,,\nhr@foo.in,Bob,Foo Ltd\npriya@acme.com,,\nblock@x.com,,\n")
             st = ingest(s, a, {"block@x.com"})
             self.assertEqual(st, {"added": 2, "duplicate": 1, "invalid": 1, "optout": 1})
-            rows = {r["email"]: r for r in s.queued(10)}
-            self.assertEqual((rows["priya@acme.com"]["name"], rows["priya@acme.com"]["company"]), ("Priya", "Acme"))
-            self.assertEqual(rows["hr@foo.in"]["company"], "Foo Ltd")
-            b = Path(t) / "b.txt"
+            self.assertEqual({r["email"] for r in s.queued(10)}, {"priya@acme.com", "hr@foo.in"})
+            b = Path(d) / "b.txt"
             b.write_text("one@zeta.org\ntwo@zeta.org, three@zeta.org\n")
             self.assertEqual(ingest(s, b, set())["added"], 3)
+            s.db.close()
 
 
 class Render(unittest.TestCase):
-    def test_variants(self):
-        with tempfile.TemporaryDirectory() as t:
-            tpl = mailer.load_templates(self._write(t))
-            subj, body = mailer.render(tpl, {"name": "Priya", "company": "Acme"})
-            self.assertEqual(subj, "Hello Acme")
-            self.assertIn("Hi Priya,", body)
-            subj, body = mailer.render(tpl, {"name": "", "company": ""})
-            self.assertIn("Hi there,", body)
-            self.assertIn("Generic", body)
+    def test_fixed_greeting(self):
+        with tempfile.TemporaryDirectory() as d:
+            subj, body = mailer.render(mailer.load_template(self._write(d)))
+            self.assertEqual(subj, "Hello")
+            self.assertTrue(body.startswith("Dear Hiring Team,"))
+
+    def test_comments_and_old_two_part_file(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / "template.txt"
+            p.write_text("# note\n\n## WITH_COMPANY\nSubject: With {company}\n\nX\n\n## NO_COMPANY\nSubject: Generic\n\n{greeting}\nBody\n")
+            subj, body = mailer.render(mailer.load_template(p))
+            self.assertEqual(subj, "Generic")
+            self.assertIn("Dear Hiring Team,", body)
+            p.write_text("# note\nSubject: Plain\n\n{greeting}\nB\n")
+            self.assertEqual(mailer.render(mailer.load_template(p))[0], "Plain")
 
     def test_unedited_template_refused(self):
-        with tempfile.TemporaryDirectory() as t:
-            p = Path(t) / "template.txt"
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / "template.txt"
             p.write_text("Subject: [EDIT: x]")
             with self.assertRaises(mailer.TemplateError):
-                mailer.load_templates(p)
+                mailer.load_template(p)
 
     def _write(self, t):
         p = Path(t) / "template.txt"
@@ -157,6 +139,18 @@ class Run(unittest.TestCase):
             res = runner.run(cfg, dry_run=True, sender_factory=FakeSender)
             self.assertEqual(FakeSender.sent, [])
             self.assertEqual(Store(cfg["dir"] / "sent.db").counts(), {"queued": 1})
+
+    def test_network_down_keeps_queue_untouched(self):
+        with tempfile.TemporaryDirectory() as t:
+            cfg = make_cfg(t)
+            (cfg["dir"] / "inbox" / "l.csv").write_text("email\na@x.com\nb@x.com\n")
+            FakeSender.fail["a@x.com"] = ConnectionError("blocked")
+            for _ in range(5):  # many hourly runs while offline must not burn attempts
+                self.assertEqual(self.go(cfg), {"sent": 0, "failed": 0})
+            s = Store(cfg["dir"] / "sent.db")
+            self.assertEqual(s.counts(), {"queued": 2})
+            self.assertEqual(s.db.execute("SELECT MAX(attempts) FROM leads").fetchone()[0], 0)
+            s.db.close()
 
     def test_auth_failure_aborts(self):
         with tempfile.TemporaryDirectory() as t:

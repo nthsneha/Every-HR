@@ -7,7 +7,7 @@ Sends your pitch emails from your own Gmail, a few a day, automatically. Needs P
 2. Keep this folder in your home folder (e.g. `~/cold-mail`), NOT in Downloads, Desktop or Documents (macOS blocks background jobs there).
 3. `python3 send.py --profile NAME init`
 4. Fill in `profiles/NAME/.env` (Gmail address, app password, your name, optional `RESUME_PATH=resume.pdf` with the file in the same folder).
-5. Write your two pitches in `profiles/NAME/template.txt`. Allowed placeholders: `{greeting}` `{name}` `{company}`. Remove every `[EDIT ...]` line.
+5. Write your one pitch in `profiles/NAME/template.txt`: first line `Subject: ...`, then the email. Every email starts with `{greeting}`, which becomes "Dear Hiring Team,". Remove every `[EDIT ...]` line.
 6. Preview, then install the schedule:
    ```
    python3 send.py --profile NAME run --dry-run
@@ -15,7 +15,7 @@ Sends your pitch emails from your own Gmail, a few a day, automatically. Needs P
    ```
 
 ## Daily use
-Drop a CSV into `profiles/NAME/inbox/` (first line `email`, then one address per line; optional `name`, `company` columns). Done. Each hour it checks, and between 9:00 and 18:00 it sends up to 30 a day, 45-120 s apart. The computer must be awake for about 30-50 minutes once a day. You get a summary email after each batch.
+Drop a CSV into `profiles/NAME/inbox/` (first line `email`, then one address per line; extra columns are ignored). Done. Each hour it checks, and between 9:00 and 18:00 it sends up to 30 a day, 45-120 s apart. The computer must be awake for about 30-50 minutes once a day. You get a summary email after each batch.
 
 ## Commands
 | What | Command |
@@ -46,11 +46,10 @@ Drop a CSV into `profiles/NAME/inbox/` (first line `email`, then one address per
 | `Could not reach Gmail` | Network blocks mail ports | Turn off VPN; try phone hotspot |
 | Command hangs | Slow Gmail/network | `Ctrl+C` is safe (progress is saved). Add `CHECK_UNSUBSCRIBES=0` to `.env` |
 | `still contains [EDIT ...]` | Template unfinished | Finish both sections in `template.txt` |
-| `KeyError` mentioning a word in `{}` | Unknown placeholder | Use only `{greeting}` `{name}` `{company}` |
+| `KeyError` mentioning a word in `{}` | Unknown placeholder | The only placeholder is `{greeting}` |
 | `FileNotFoundError` for the resume | Wrong `RESUME_PATH` | Put the PDF in `profiles/NAME/` and set `RESUME_PATH=resume.pdf` (exact name) |
 | `another run is already in progress` | A run is active or crashed | Wait a few minutes; if stuck: `rm profiles/NAME/.lock` |
 | Nothing sends by itself | Schedule not firing | `crontab -l` shows a line? Folder not in Downloads/Desktop/Documents? Mac awake in 9-18? After moving the folder, re-run `schedule --apply` |
 | Emails land in spam | Gmail distrusts the burst | Lower `DAILY_LIMIT`, vary wording, send to fewer people for a week |
 | Gmail says suspicious activity | Sending too much | Stop for a day, lower `DAILY_LIMIT`, then resume |
 | Some rows `failed` | Bad or refused address | `status` shows count; details in `run.log`; fix the address and re-add in a new CSV after removing it from the old list |
-| Greeting looks odd (`Hi Rahulverma,`) | Name guessed from the address | Add a `name` column to your CSV for those rows |

@@ -25,26 +25,15 @@ SEND_START_HOUR=9
 SEND_END_HOUR=18
 """
 
-SAMPLE_TEMPLATE = """# Placeholders: {greeting}  {name}  {company}
+SAMPLE_TEMPLATE = """# Line 1 must be the Subject. {greeting} becomes "Dear Hiring Team,".
 # Remove every [EDIT ...] line before sending - the tool refuses to run until you do.
-
-## WITH_COMPANY
-Subject: [EDIT: subject that mentions {company}]
+Subject: [EDIT: subject line]
 
 {greeting}
 
-[EDIT: 3-5 sentences pitching yourself, mentioning {company}.]
+[EDIT: 3-5 sentences pitching yourself.]
 
-[EDIT: your name, phone/LinkedIn]
-
-## NO_COMPANY
-Subject: [EDIT: subject without a company name]
-
-{greeting}
-
-[EDIT: 3-5 sentences pitching yourself, with no company name.]
-
-[EDIT: your name, phone/LinkedIn]
+[EDIT: your name, LinkedIn / GitHub]
 """
 
 

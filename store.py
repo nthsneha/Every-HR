@@ -5,7 +5,6 @@ import sqlite3
 from datetime import datetime
 from pathlib import Path
 
-from guess import guess_company, guess_name
 
 EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+\-]+@[A-Za-z0-9\-]+(\.[A-Za-z0-9\-]+)+$")
 FIND_RE = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9\-]+(?:\.[A-Za-z0-9\-]+)+")
@@ -82,7 +81,7 @@ def parse_file(path: Path) -> list:
     """Return [(email, name, company)] from a CSV or plain list of emails.
 
     Understands a header row with email/name/company columns; otherwise takes
-    every email-looking cell. Missing name/company are guessed from the address.
+    every email-looking cell. Names and companies are not used.
     """
     with open(path, newline="", encoding="utf-8-sig") as f:
         rows = list(csv.reader(f))
@@ -119,9 +118,7 @@ def ingest(store: Store, path: Path, optout: set) -> dict:
         if email in optout:
             stats["optout"] += 1
             continue
-        name = name or guess_name(email)
-        company = company or guess_company(email)
-        if store.add(email, name, company, path.name):
+        if store.add(email, "", "", path.name):
             stats["added"] += 1
         else:
             stats["duplicate"] += 1
